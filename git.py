@@ -262,44 +262,22 @@ def get_video():
         "Accept": "application/json"
     }
 
-    # Primary: tikwm
+        # Instant yt-dlp fallback
     try:
-        api_url = f"https://www.tikwm.com/api/?url={urllib.parse.quote(url)}"
-        r = requests.get(api_url, headers=headers, timeout=15)
-        j = r.json()
-        data = j.get("data")
-        if data and (data.get("play") or data.get("music")):
-            direct = data.get("music") if mode == "mp3" else (data.get("play") or data.get("hdplay") or data.get("wmplay"))
-            if direct:
-                return jsonify({
-                    "direct": direct,
-                    "title": data.get("title", "TikTok Media"),
-                    "cover": data.get("cover") or data.get("origin_cover") or data.get("ai_dynamic_cover")
-                })
-    except Exception as e:
-        print("tikwm error:", e)
-
-    # Fallback: tiklydown
-    try:
-        api_url2 = f"https://api.tiklydown.eu.org/api/download?url={urllib.parse.quote(url)}"
-        r2 = requests.get(api_url2, headers=headers, timeout=15)
-        j2 = r2.json()
-        if j2 and j2.get("video"):
-            v = j2["video"]
-            direct = v.get("noWatermark") or v.get("watermark")
-            if mode == "mp3" and j2.get("music"):
-                direct = j2["music"].get("play_url") or direct
-            if direct:
-                return jsonify({
-                    "direct": direct,
-                    "title": j2.get("title", "TikTok Media"),
-                    "cover": j2.get("cover") or j2.get("thumbnail")
-                })
-    except Exception as e:
-        print("tiklydown error:", e)
-
-    return jsonify({"error": "Unable to resolve TikTok video. Link may be private or invalid."}), 500
-
+        opts = {'quiet': True, 'nocheckcertificate': True, 'format': 'best'}
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if info:
+                v_url = info.get("url") or (info["formats"][-1].get("url") if info.get("formats") else None)
+                if v_url:
+                    return jsonify({
+                        "direct": v_url,
+                        "title": info.get("title", "Media Stream"),
+                        "cover": info.get("thumbnail")
+                    })
+    except Exception:
+        pass
+        
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
