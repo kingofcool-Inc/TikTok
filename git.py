@@ -24,7 +24,7 @@ UI = """<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#00ff66">
-<title>TT Videos</title>
+<title>TRIP MUSIC</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,sans-serif}
 body{background:#000;color:#fff;display:flex;justify-content:center;min-height:100vh;padding:12px}
@@ -147,7 +147,33 @@ window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
 });
-document.getElementById('tab-mp3').classList.toggle('active', mode === 'mp3');
+
+function installApp() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
+  } else {
+    alert('Tap your browser menu (3 dots) and select "Add to Home screen" to install this Web App on your phone.');
+  }
+}
+
+function shareApp() {
+  if (navigator.share) {
+    navigator.share({
+      title: 'TRIP MUSIC',
+      text: 'Instant TikTok Downloader',
+      url: window.location.href
+    }).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(window.location.href);
+    alert('App link copied to clipboard!');
+  }
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('tab-mp4').classList.toggle('active', mode === 'mp4');
+  document.getElementById('tab-mp3').classList.toggle('active', mode === 'mp3');
 }
 
 function updateProgress(pct, statusText) {
@@ -155,10 +181,12 @@ function updateProgress(pct, statusText) {
   const pBar = document.getElementById('pBar');
   const pNum = document.getElementById('pNum');
   const pStatus = document.getElementById('pStatus');
-                                                        if (pct >= 0 && pct < 100) {
+
+  if (pct >= 0 && pct < 100) {
     pWrap.style.display = 'flex';
     pBar.style.width = pct + '%';
-    pNum.innerText = Math.round(pct) + '%';               if(statusText) pStatus.innerText = statusText;
+    pNum.innerText = Math.round(pct) + '%';
+    if(statusText) pStatus.innerText = statusText;
   } else {
     pBar.style.width = '100%';
     pNum.innerText = '100%';
@@ -170,13 +198,13 @@ function updateProgress(pct, statusText) {
 async function fetchMedia() {
   const url = document.getElementById('urlInput').value.trim();
   if(!url) return;
-
+  
   updateProgress(40, "Fetching...");
   try {
     updateProgress(80, "Readying...");
     const res = await fetch(`/get?url=${encodeURIComponent(url)}&mode=${currentMode}`);
     const data = await res.json();
-
+    
     if (data.error) {
       updateProgress(100, "Error!");
       alert(data.error);
@@ -188,7 +216,7 @@ async function fetchMedia() {
     document.getElementById('resultCard').style.display = 'flex';
     document.getElementById('mediaTitle').innerText = data.title || 'TikTok Media';
     document.getElementById('mediaThumb').src = data.cover || 'https://cdn-icons-png.flaticon.com/512/3046/3046120.png';
-
+    
     // Direct stream link for high-speed download
     const dlLink = document.getElementById('instantDlBtn');
     dlLink.href = `/download?url=${encodeURIComponent(data.direct)}&filename=trip_music_${Date.now()}.${currentMode}`;
@@ -296,3 +324,4 @@ def get():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, threaded=True)
+    
