@@ -126,8 +126,10 @@ body{background:#000;color:#fff;display:flex;justify-content:center;min-height:1
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> DOWNLOAD
       </a>
     </div>
-    <div id="playerArea"></div>
+    /<div id="playerArea"></div>
   </div>
+  <div style="text-align: center; font-size: 12px; margin-top: 20px;">Made by Trap Styler</div>
+  
 </div>
 
 <script>
