@@ -1,19 +1,8 @@
-import os
-import httpx
-import yt_dlp
-from flask import Flask, request, jsonify, Response
+import urllib.parse
+import requests
+from flask import Flask, request, jsonify, Response, stream_with_context
 
 app = Flask(__name__)
-
-# Ultra-fast HTTP client using HTTP/2 and persistent pooling
-http_client = httpx.Client(
-    http2=True,
-    timeout=httpx.Timeout(3.0, connect=1.5),
-    limits=httpx.Limits(max_keepalive_connections=100, max_connections=200),
-    headers={
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-)
 
 UI = """<!DOCTYPE html>
 <html lang="en">
@@ -27,51 +16,42 @@ UI = """<!DOCTYPE html>
 <title>TikTok Video Downloader</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,sans-serif;user-select:none;}
-body{background:#000;color:#fff;display:flex;justify-content:center;min-height:100vh;padding:12px}
+body{background:#000;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:space-between;min-height:100vh;padding:12px}
 .app{width:100%;max-width:440px;display:flex;flex-direction:column;gap:16px}
-
-/* Header Navbar */
 .nav{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#050505;border:1px solid #00ff6644;border-radius:18px;box-shadow:0 0 12px #00ff6633,inset 0 0 12px #00ff6611}
 .nav-btn{width:38px;height:38px;border-radius:12px;border:1px solid #00ff66;background:#00ff6610;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 10px #00ff6688;transition:0.2s}
 .nav-btn:active{transform:scale(0.92)}
 .nav-title{color:#00ff66;font-weight:900;letter-spacing:2px;font-size:16px;text-shadow:0 0 10px #00ff66,0 0 20px #00ff66}
-
-/* Search Input */
 .search-box{display:flex;align-items:center;background:#080808;border:1px solid #00ff6688;border-radius:30px;padding:6px 8px 6px 16px;gap:10px;box-shadow:0 0 15px #00ff6644}
 .search-box svg{width:18px;height:18px;fill:none;stroke:#00ff66;stroke-width:2.5;filter:drop-shadow(0 0 4px #00ff66)}
 .search-box input{flex:1;background:transparent;border:0;color:#fff;font-size:13px;outline:none}
 .go-btn{background:#00ff66;color:#000;font-weight:900;border:0;border-radius:20px;padding:8px 18px;font-size:13px;cursor:pointer;box-shadow:0 0 15px #00ff66,0 0 30px #00ff66aa;transition:0.2s}
-
-/* Tabs */
 .tabs{display:flex;background:#080808;border:1px solid #00ff6644;border-radius:30px;padding:4px;gap:4px}
 .tab-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:24px;border:0;background:transparent;color:#00ff66;font-weight:800;font-size:13px;cursor:pointer;transition:0.2s}
 .tab-btn svg{width:16px;height:16px;fill:currentColor}
 .tab-btn.active{background:#00ff66;color:#000;box-shadow:0 0 20px #00ff66,0 0 35px #00ff66aa}
-
-/* Progress Bar */
 .progress-box{display:none;flex-direction:column;gap:6px;margin-top:4px}
 .progress-text-wrap{display:flex;justify-content:space-between;font-size:11px;color:#00ff66;font-weight:700;text-shadow:0 0 6px #00ff66}
 .progress-container{width:100%;height:8px;background:#111;border-radius:10px;border:1px solid #00ff6644;overflow:hidden}
 .progress-bar{width:0%;height:100%;background:#00ff66;box-shadow:0 0 12px #00ff66,0 0 24px #00ff66;transition:width 0.1s linear}
-
-/* Media Card */
 .card{background:#090909;border:1px solid #00ff6644;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:14px;box-shadow:0 0 15px #00ff6622}
 .card-header{display:flex;gap:12px;align-items:center}
 .thumb{width:80px;height:55px;border-radius:10px;background:#151515;object-fit:cover;border:1px solid #00ff6644}
 .card-info{flex:1;min-width:0}
 .card-info .title{font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card-info .sub{font-size:10px;color:#00ff66aa;margin-top:4px}
-
-/* Action Buttons */
 .actions{display:flex;gap:10px}
 .act-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:24px;border:0;font-weight:800;font-size:12px;cursor:pointer;transition:0.2s;text-decoration:none}
 .act-btn svg{width:14px;height:14px;fill:currentColor}
 .btn-play{background:#000;color:#fff;border:1px solid #00ff6688;box-shadow:inset 0 0 8px #00ff6633}
 .btn-dl{background:#00ff66;color:#000;box-shadow:0 0 18px #00ff66,0 0 30px #00ff66aa}
+.btn-reset{background:transparent;color:#ff007f;border:1px solid #ff007f88;padding:10px;border-radius:20px;font-weight:800;font-size:11px;cursor:pointer;margin-top:10px;box-shadow:0 0 10px #ff007f44;transition:0.2s}
+.btn-reset:active{transform:scale(0.95)}
+.footer{text-align:center;font-size:13px;font-weight:800;margin-top:20px;padding-bottom:10px}
+.footer-text{background:linear-gradient(90deg, #00ff66, #ff007f);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 0 12px rgba(0,255,102,0.5), 0 0 12px rgba(255,0,127,0.5)}
 </style>
 </head>
 <body>
-
 <div class="app">
   <div class="nav">
     <button class="nav-btn" onclick="shareApp()" title="Share App">
@@ -82,13 +62,11 @@ body{background:#000;color:#fff;display:flex;justify-content:center;min-height:1
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="#00ff66" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
   </div>
-
   <div class="search-box">
     <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     <input id="urlInput" type="text" placeholder="Paste TikTok link..." value="">
     <button class="go-btn" onclick="fetchMedia()">GO</button>
   </div>
-
   <div class="tabs">
     <button class="tab-btn active" id="tab-mp4" onclick="setMode('mp4')">
       <svg viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
@@ -99,7 +77,6 @@ body{background:#000;color:#fff;display:flex;justify-content:center;min-height:1
       MP3
     </button>
   </div>
-
   <div class="progress-box" id="pWrap">
     <div class="progress-text-wrap">
       <span id="pStatus">Fetching...</span>
@@ -109,7 +86,6 @@ body{background:#000;color:#fff;display:flex;justify-content:center;min-height:1
       <div class="progress-bar" id="pBar"></div>
     </div>
   </div>
-
   <div class="card" id="resultCard" style="display:none;">
     <div class="card-header">
       <img id="mediaThumb" class="thumb" src="" alt="preview">
@@ -126,30 +102,26 @@ body{background:#000;color:#fff;display:flex;justify-content:center;min-height:1
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> DOWNLOAD
       </a>
     </div>
-    /<div id="playerArea"></div>
+    <div id="playerArea"></div>
+    <button class="btn-reset" onclick="resetDownloader()">DOWNLOAD ANOTHER VIDEO</button>
   </div>
-  <div style="text-align: center; font-size: 12px; margin-top: 20px;">Made by Trap Styler</div>
-  
 </div>
-
+<div class="footer">
+  <span class="footer-text">Made by TrapStyler</span>
+</div>
 <script>
 let currentMode = 'mp4';
 let currentData = null;
 let deferredPrompt = null;
-
-// Register Service Worker for home screen Web App capability
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(()=>{});
   });
 }
-
-// Store installation trigger for top button
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
 });
-
 function installApp() {
   if (deferredPrompt) {
     deferredPrompt.prompt();
@@ -158,32 +130,24 @@ function installApp() {
     alert('Tap your browser menu (3 dots) and select "Add to Home screen" to install this Web App on your phone.');
   }
 }
-
 function shareApp() {
   if (navigator.share) {
-    navigator.share({
-      title: 'TRIP MUSIC',
-      text: 'Instant TikTok Downloader',
-      url: window.location.href
-    }).catch(()=>{});
+    navigator.share({ title: 'TRIP MUSIC', text: 'Instant TikTok Downloader', url: window.location.href }).catch(()=>{});
   } else {
     navigator.clipboard.writeText(window.location.href);
     alert('App link copied to clipboard!');
   }
 }
-
 function setMode(mode) {
   currentMode = mode;
   document.getElementById('tab-mp4').classList.toggle('active', mode === 'mp4');
   document.getElementById('tab-mp3').classList.toggle('active', mode === 'mp3');
 }
-
 function updateProgress(pct, statusText) {
   const pWrap = document.getElementById('pWrap');
   const pBar = document.getElementById('pBar');
   const pNum = document.getElementById('pNum');
   const pStatus = document.getElementById('pStatus');
-
   if (pct >= 0 && pct < 100) {
     pWrap.style.display = 'flex';
     pBar.style.width = pct + '%';
@@ -196,40 +160,36 @@ function updateProgress(pct, statusText) {
     setTimeout(() => { pWrap.style.display = 'none'; pBar.style.width = '0%'; }, 400);
   }
 }
-
 async function fetchMedia() {
   const url = document.getElementById('urlInput').value.trim();
   if(!url) return;
-  
-  updateProgress(40, "Fetching...");
+  updateProgress(20, "Connecting...");
   try {
-    updateProgress(80, "Reading...");
+    updateProgress(60, "Fetching from server...");
     const res = await fetch(`/get?url=${encodeURIComponent(url)}&mode=${currentMode}`);
     const data = await res.json();
-    
-    if (data.error) {
-      updateProgress(100, "Error!");
-      alert(data.error);
-      return;
-    }
-
+    if (!res.ok) throw new Error(data.error || "Server error");
+    if (!data.direct) throw new Error("No video found");
     updateProgress(100, "Done!");
     currentData = data;
     document.getElementById('resultCard').style.display = 'flex';
     document.getElementById('mediaTitle').innerText = data.title || 'TikTok Media';
     document.getElementById('mediaThumb').src = data.cover || 'https://cdn-icons-png.flaticon.com/512/3046/3046120.png';
-    
-    // Direct stream link for high-speed download
     const dlLink = document.getElementById('instantDlBtn');
-    dlLink.href = `/download?url=${encodeURIComponent(data.direct)}&filename=trip_music_${Date.now()}.${currentMode}`;
-
+    dlLink.href = `/download?url=${encodeURIComponent(data.direct)}&filename=tiktok_${Date.now()}.${currentMode}`;
     document.getElementById('playerArea').innerHTML = '';
   } catch(e) {
+    console.log(e);
     updateProgress(100, "Failed!");
-    alert('Failed to process link.');
+    alert('Failed: ' + e.message);
   }
 }
-
+function resetDownloader() {
+  document.getElementById('urlInput').value = '';
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('playerArea').innerHTML = '';
+  currentData = null;
+}
 function playMedia() {
   if(!currentData || !currentData.direct) return;
   const area = document.getElementById('playerArea');
@@ -251,7 +211,7 @@ def home():
 def manifest():
     return jsonify({
         "name": "TikTok Video Downloader",
-        "short_name": "TikTok Video Downloader",
+        "short_name": "TikTok Downloader",
         "start_url": "/",
         "display": "standalone",
         "background_color": "#000000",
@@ -266,64 +226,81 @@ def service_worker():
 @app.route("/download")
 def download_stream():
     media_url = request.args.get("url")
-    filename = request.args.get("filename", "download.mp4")
+    filename = request.args.get("filename", "video.mp4")
     if not media_url:
         return "Missing URL", 400
-
-    def generate():
-        with http_client.stream("GET", media_url) as res:
-            for chunk in res.iter_bytes(chunk_size=131072):
-                yield chunk
-
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "Content-Type": "application/octet-stream"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Referer": "https://www.tiktok.com/"
     }
-    return Response(generate(), headers=headers)
+    try:
+        req = requests.get(media_url, headers=headers, stream=True, timeout=30)
+        def generate():
+            for chunk in req.iter_content(chunk_size=131072):
+                if chunk:
+                    yield chunk
+        response_headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "application/octet-stream"
+        }
+        if "Content-Length" in req.headers:
+            response_headers["Content-Length"] = req.headers["Content-Length"]
+        return Response(stream_with_context(generate()), headers=response_headers)
+    except Exception as e:
+        return f"Download error: {str(e)}", 500
 
 @app.route("/get")
-def get():
+def get_video():
     url = request.args.get("url", "").strip()
     mode = request.args.get("mode", "mp4")
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    # Sub-second fast TikWM endpoint call
-    try:
-        res = http_client.get(f"https://www.tikwm.com/api/?url={url}")
-        if res.status_code == 200:
-            data = res.json().get("data")
-            if data:
-                direct = data.get("play")
-                if mode == "mp3":
-                    direct = data.get("music")
-                if direct:
-                    return jsonify({
-                        "direct": direct,
-                        "title": data.get("title", "TikTok Media"),
-                        "cover": data.get("cover") or data.get("origin_cover")
-                    })
-    except Exception:
-        pass
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://www.tikwm.com/",
+        "Accept": "application/json"
+    }
 
-    # Instant yt-dlp fallback
+    # Primary: tikwm
     try:
-        opts = {'quiet': True, 'nocheckcertificate': True, 'extract_flat': True, 'skip_download': True, 'format': 'best'}
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info:
-                v_url = info.get("url") or (info["formats"][-1].get("url") if info.get("formats") else None)
-                if v_url:
-                    return jsonify({
-                        "direct": v_url,
-                        "title": info.get("title", "Media Stream"),
-                        "cover": info.get("thumbnail")
-                    })
-    except Exception:
-        pass
+        api_url = f"https://www.tikwm.com/api/?url={urllib.parse.quote(url)}"
+        r = requests.get(api_url, headers=headers, timeout=15)
+        j = r.json()
+        data = j.get("data")
+        if data and (data.get("play") or data.get("music")):
+            direct = data.get("music") if mode == "mp3" else (data.get("play") or data.get("hdplay") or data.get("wmplay"))
+            if direct:
+                return jsonify({
+                    "direct": direct,
+                    "title": data.get("title", "TikTok Media"),
+                    "cover": data.get("cover") or data.get("origin_cover") or data.get("ai_dynamic_cover")
+                })
+    except Exception as e:
+        print("tikwm error:", e)
 
-    return jsonify({"error": "Unable to resolve media link"}), 500
+    # Fallback: tiklydown
+    try:
+        api_url2 = f"https://api.tiklydown.eu.org/api/download?url={urllib.parse.quote(url)}"
+        r2 = requests.get(api_url2, headers=headers, timeout=15)
+        j2 = r2.json()
+        if j2 and j2.get("video"):
+            v = j2["video"]
+            direct = v.get("noWatermark") or v.get("watermark")
+            if mode == "mp3" and j2.get("music"):
+                direct = j2["music"].get("play_url") or direct
+            if direct:
+                return jsonify({
+                    "direct": direct,
+                    "title": j2.get("title", "TikTok Media"),
+                    "cover": j2.get("cover") or j2.get("thumbnail")
+                })
+    except Exception as e:
+        print("tiklydown error:", e)
+
+    return jsonify({"error": "Unable to resolve TikTok video. Link may be private or invalid."}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, threaded=True)
-    
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, threaded=True)
