@@ -1,4 +1,4 @@
 flask
-httpx
+httpx[http2]
 yt-dlp
 gunicorn
