@@ -306,9 +306,9 @@ def get():
     except Exception:
         pass
 
-    # Instant yt-dlp fallback
+        # Instant yt-dlp fallback
     try:
-        opts = {'quiet': True, 'nocheckcertificate': True, 'extract_flat': True, 'skip_download': True, 'format': 'best'}
+        opts = {'quiet': True, 'nocheckcertificate': True, 'format': 'best'}
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             if info:
@@ -321,9 +321,7 @@ def get():
                     })
     except Exception:
         pass
-
-    return jsonify({"error": "Unable to resolve media link"}), 500
-
+        
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, threaded=True)
     
