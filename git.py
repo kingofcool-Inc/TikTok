@@ -24,9 +24,9 @@ UI = """<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#00ff66">
-<title>TRIP MUSIC</title>
+<title>TikTok Video Downloader</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,sans-serif;user-select:none;}
 body{background:#000;color:#fff;display:flex;justify-content:center;min-height:100vh;padding:12px}
 .app{width:100%;max-width:440px;display:flex;flex-direction:column;gap:16px}
 
@@ -201,7 +201,7 @@ async function fetchMedia() {
   
   updateProgress(40, "Fetching...");
   try {
-    updateProgress(80, "Readying...");
+    updateProgress(80, "Reading...");
     const res = await fetch(`/get?url=${encodeURIComponent(url)}&mode=${currentMode}`);
     const data = await res.json();
     
