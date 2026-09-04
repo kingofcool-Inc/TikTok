@@ -1,5 +1,4 @@
 flask
 httpx[http2]
-yt-dlp
 gunicorn
 requests
