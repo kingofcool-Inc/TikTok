@@ -1,1 +1,1 @@
-web:python git.py
+web: gunicorn git:app
