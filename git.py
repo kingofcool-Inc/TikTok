@@ -78,11 +78,17 @@ def get_fb_api(url):
     return None
 
 def get_tiktok_api(url):
+    # Resolve shortened URLs (e.g., vt.tiktok.com) to full URLs first
+    try:
+        resolved_res = requests.head(url, allow_redirects=True, timeout=5)
+        url = resolved_res.url
+    except Exception:
+        pass
+
     res = requests.post("https://www.tikwm.com/api/", data={"url": url}, timeout=10)
     j = res.json()
     if j.get('data'):
         data = j.get('data', {})
-        # Use direct play URL without watermark
         video_url = data.get('play') or data.get('wmplay')
         if video_url and video_url.startswith('/'):
             video_url = 'https://www.tikwm.com' + video_url
@@ -93,6 +99,7 @@ def get_tiktok_api(url):
             "download_url": video_url
         }
     return None
+    
 
 @app.route('/')
 def index():
